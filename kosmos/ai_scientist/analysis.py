@@ -359,20 +359,39 @@ def verify(experiments):
 Generate the verification algorithm now:"""
 
         try:
-            # Call Anthropic API
-            message = self.client.messages.create(
-                model=self.model,
-                max_tokens=2048,
-                temperature=0.2,  # Lower temperature for code generation
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            )
+            # Call LLM API based on provider
+            if self.provider == "openai":
+                # OpenAI-compatible API (Gemini, etc.)
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_tokens=2048,
+                    temperature=0.2  # Lower temperature for code generation
+                )
+                response_text = response.choices[0].message.content.strip()
 
-            response_text = message.content[0].text.strip()
+            elif self.provider == "anthropic":
+                # Anthropic API
+                message = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=2048,
+                    temperature=0.2,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+                response_text = message.content[0].text.strip()
+            else:
+                logger.warning(f"[LLM Verification] Unknown provider: {self.provider}")
+                return None
 
             # Extract code from response (may be wrapped in markdown)
             code = self._extract_code(response_text)
