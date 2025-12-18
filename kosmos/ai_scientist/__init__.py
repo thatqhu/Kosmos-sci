@@ -2,28 +2,39 @@
 CIAS-X AI Scientist Loop Framework
 A modular implementation of automated scientific discovery for SCI.
 
-Author: Auto-generated
-Date: 2025-12-16
+Refactored to use ResearchWorkflow architecture.
 """
 
-__version__ = "1.0.0"
-
+# Core data structures (preserved)
 from .data_structures import Configuration, Metrics, Artifacts, ExperimentRecord, WorldModel
-from .world_model import WorldModelManager
+
+# New workflow architecture
+from .workflow import SCIResearchWorkflow
+from .world_model import SCIStateManager
+from .agents import SCIExecutorAgent
+
+# Legacy components (preserved as utilities)
 from .executor import Executor
 from .analysis import AnalysisAgent
 from .planner import Planner
+
+# Deprecated - kept for backward compatibility
 from .scientist_loop import AIScientistLoop
 
 __all__ = [
+    # Data structures
     "Configuration",
-    "Metrics", 
+    "Metrics",
     "Artifacts",
     "ExperimentRecord",
     "WorldModel",
-    "WorldModelManager",
+    # New workflow components
+    "SCIResearchWorkflow",
+    "SCIStateManager",
+    "SCIExecutorAgent",
+    # Legacy utilities
     "Executor",
     "AnalysisAgent",
     "Planner",
-    "AIScientistLoop",
+    "AIScientistLoop",  # Deprecated
 ]

@@ -3,14 +3,34 @@ AI Scientist Loop Module
 
 Implements Algorithm 1: CIAS-X AI Scientist Loop
 Main orchestration loop for automated scientific discovery.
+
+DEPRECATED: This module is kept for backward compatibility.
+Use kosmos.ai_scientist.workflow.SCIResearchWorkflow instead.
 """
 
 from typing import Dict, List, Any, Set, Tuple
 from .data_structures import WorldModel, Configuration
-from .world_model import WorldModelManager
+
+# Import from new location - use local WorldModelManager for compatibility
+class WorldModelManager:
+    """Deprecated compatibility wrapper."""
+    @staticmethod
+    def update(world_model, config, metrics, artifacts):
+        from .data_structures import ExperimentRecord
+        import uuid
+        experiment = ExperimentRecord(
+            id=str(uuid.uuid4()),
+            config=config,
+            metrics=metrics,
+            artifacts=artifacts
+        )
+        world_model.experiments.append(experiment)
+        return world_model
+
 from .executor import Executor
 from .analysis import AnalysisAgent
 from .planner import Planner
+
 
 
 class AIScientistLoop:
@@ -21,7 +41,7 @@ class AIScientistLoop:
     1. Initializes world model with seed experiments
     2. Iteratively:
        a. Summarizes current knowledge
-       b. Plans new experiments (LLM-based)
+       b. Plans new experiments (LLM-based), this part will research uncovered config
        c. Executes experiments
        d. Analyzes results (Pareto, trends)
        e. Updates planner context

@@ -1,0 +1,57 @@
+{
+  "finding_id": "sci_exp_4dc62ee2",
+  "cycle": 6,
+  "task_id": 6,
+  "summary": "SCI\u914d\u7f6e\u8bc4\u4f30: Baseline-CNN + None",
+  "statistics": {
+    "psnr": 28.631453384709612,
+    "coverage": 0.937245231150667,
+    "latency": 28.863879707358663,
+    "calibration_error": null
+  },
+  "methods": "\u4f7f\u7528Baseline-CNN\u67b6\u6784\u8fdb\u884cSCI\u91cd\u5efa\uff0cUQ\u65b9\u6848: None",
+  "interpretation": "\u4f18\u79c0\u7684\u91cd\u5efa\u8d28\u91cf (PSNR > 28dB); \u9ad8\u53ef\u9760\u7684\u4e0d\u786e\u5b9a\u6027\u4f30\u8ba1 (coverage > 90%); \u4e2d\u7b49\u63a8\u7406\u901f\u5ea6",
+  "evidence_type": "sci_optimization_result",
+  "notebook_path": null,
+  "citations": null,
+  "scholar_eval": null,
+  "metadata": {
+    "config": {
+      "forward_config": {
+        "compression_ratio": 8
+      },
+      "recon_family": "Baseline-CNN",
+      "recon_params": {
+        "num_layers": 6
+      },
+      "uq_scheme": "None",
+      "uq_params": {},
+      "train_config": {
+        "epochs": 30,
+        "lr": 0.001
+      }
+    },
+    "artifacts": {
+      "checkpoint": "checkpoint_a6b1943c.pth",
+      "uq_params": {},
+      "train_log": "train_log_01bb9b3f.txt",
+      "eval_samples": [
+        "sample_0.png",
+        "sample_1.png",
+        "sample_2.png"
+      ],
+      "fig_scripts": [
+        "figure_0.py",
+        "figure_1.py"
+      ]
+    },
+    "pareto_optimal": false
+  },
+  "timestamp": "2025-12-17T19:33:15.575152",
+  "hypothesis_id": null,
+  "refutes_hypothesis": false,
+  "confidence": 0.5,
+  "figure_paths": null,
+  "figure_metadata": null,
+  "notebook_metadata": null
+}

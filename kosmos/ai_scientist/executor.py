@@ -72,7 +72,7 @@ class Executor:
         # test_data = LOAD_TEST_SET(config)
         # m(c) = EVALUATE_METRICS(f_θ, F, UQParams*, test_data)
 
-        # Simulated metrics (replace with real evaluation)
+        # SIMULATED metrics (replace with real evaluation)!!!
         base_psnr = 28.0 if config.recon_family == "CIAS-Core-ELP" else 26.0
         metrics = Metrics(
             psnr=base_psnr + random.uniform(-2, 3),

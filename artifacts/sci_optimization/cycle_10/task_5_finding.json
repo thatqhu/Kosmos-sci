@@ -1,0 +1,63 @@
+{
+  "finding_id": "sci_exp_ebb900cf",
+  "cycle": 10,
+  "task_id": 5,
+  "summary": "SCI\u914d\u7f6e\u8bc4\u4f30: CIAS-Core + Ensemble",
+  "statistics": {
+    "psnr": 28.860356657995943,
+    "coverage": 0.9193492178043967,
+    "latency": 18.251722256275897,
+    "calibration_error": 0.010677600003311074
+  },
+  "methods": "\u4f7f\u7528CIAS-Core\u67b6\u6784\u8fdb\u884cSCI\u91cd\u5efa\uff0cUQ\u65b9\u6848: Ensemble",
+  "interpretation": "\u4f18\u79c0\u7684\u91cd\u5efa\u8d28\u91cf (PSNR > 28dB); \u9ad8\u53ef\u9760\u7684\u4e0d\u786e\u5b9a\u6027\u4f30\u8ba1 (coverage > 90%); \u5feb\u901f\u63a8\u7406 (< 20ms)",
+  "evidence_type": "sci_optimization_result",
+  "notebook_path": null,
+  "citations": null,
+  "scholar_eval": null,
+  "metadata": {
+    "config": {
+      "forward_config": {
+        "compression_ratio": 16
+      },
+      "recon_family": "CIAS-Core",
+      "recon_params": {
+        "num_layers": 8,
+        "hidden_dim": 64
+      },
+      "uq_scheme": "Ensemble",
+      "uq_params": {
+        "n_models": 5
+      },
+      "train_config": {
+        "epochs": 40,
+        "lr": 0.0005
+      }
+    },
+    "artifacts": {
+      "checkpoint": "checkpoint_0e5703da.pth",
+      "uq_params": {
+        "n_models": 5,
+        "variance": 0.05
+      },
+      "train_log": "train_log_2e64deb9.txt",
+      "eval_samples": [
+        "sample_0.png",
+        "sample_1.png",
+        "sample_2.png"
+      ],
+      "fig_scripts": [
+        "figure_0.py",
+        "figure_1.py"
+      ]
+    },
+    "pareto_optimal": false
+  },
+  "timestamp": "2025-12-17T19:33:15.619161",
+  "hypothesis_id": null,
+  "refutes_hypothesis": false,
+  "confidence": 0.5,
+  "figure_paths": null,
+  "figure_metadata": null,
+  "notebook_metadata": null
+}

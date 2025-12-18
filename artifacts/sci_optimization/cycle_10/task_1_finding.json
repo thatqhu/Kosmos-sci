@@ -1,0 +1,63 @@
+{
+  "finding_id": "sci_exp_1b58e4a5",
+  "cycle": 10,
+  "task_id": 1,
+  "summary": "SCI\u914d\u7f6e\u8bc4\u4f30: CIAS-Core-ELP + Conformal",
+  "statistics": {
+    "psnr": 29.796851131150373,
+    "coverage": 0.8537541353430812,
+    "latency": 24.270000994464173,
+    "calibration_error": 0.02536952441087709
+  },
+  "methods": "\u4f7f\u7528CIAS-Core-ELP\u67b6\u6784\u8fdb\u884cSCI\u91cd\u5efa\uff0cUQ\u65b9\u6848: Conformal",
+  "interpretation": "\u4f18\u79c0\u7684\u91cd\u5efa\u8d28\u91cf (PSNR > 28dB); \u53ef\u63a5\u53d7\u7684\u4e0d\u786e\u5b9a\u6027\u4f30\u8ba1; \u4e2d\u7b49\u63a8\u7406\u901f\u5ea6",
+  "evidence_type": "sci_optimization_result",
+  "notebook_path": null,
+  "citations": null,
+  "scholar_eval": null,
+  "metadata": {
+    "config": {
+      "forward_config": {
+        "compression_ratio": 8
+      },
+      "recon_family": "CIAS-Core-ELP",
+      "recon_params": {
+        "num_layers": 10,
+        "hidden_dim": 128
+      },
+      "uq_scheme": "Conformal",
+      "uq_params": {
+        "alpha": 0.1
+      },
+      "train_config": {
+        "epochs": 50,
+        "lr": 0.001
+      }
+    },
+    "artifacts": {
+      "checkpoint": "checkpoint_eafc1f1b.pth",
+      "uq_params": {
+        "threshold": 0.9,
+        "alpha": 0.1
+      },
+      "train_log": "train_log_1398130f.txt",
+      "eval_samples": [
+        "sample_0.png",
+        "sample_1.png",
+        "sample_2.png"
+      ],
+      "fig_scripts": [
+        "figure_0.py",
+        "figure_1.py"
+      ]
+    },
+    "pareto_optimal": false
+  },
+  "timestamp": "2025-12-17T19:32:53.118810",
+  "hypothesis_id": null,
+  "refutes_hypothesis": false,
+  "confidence": 0.5,
+  "figure_paths": null,
+  "figure_metadata": null,
+  "notebook_metadata": null
+}
