@@ -39,7 +39,8 @@ class SCIResearchWorkflow:
         optimization_objectives: List[str] = ['psnr', 'coverage'],
         anthropic_client=None,
         artifacts_dir: str = "artifacts/sci",
-        budget_max: int = 50
+        budget_max: int = 50,
+        enable_llm_verification: bool = False
     ):
         """
         Initialize SCI Research Workflow.
@@ -52,6 +53,7 @@ class SCIResearchWorkflow:
             anthropic_client: Anthropic client for LLM-based planning
             artifacts_dir: Directory for artifacts
             budget_max: Maximum number of experiments
+            enable_llm_verification: Enable LLM-generated verification algorithms
         """
         self.research_objective = research_objective
         self.design_space = design_space
@@ -59,18 +61,30 @@ class SCIResearchWorkflow:
         self.optimization_objectives = optimization_objectives
         self.budget_max = budget_max
         self.experiments_conducted = 0
+        self.anthropic_client = anthropic_client
 
         logger.info("Initializing SCI Research Workflow...")
 
-        # Initialize components
+        # Initialize state management
         self.state_manager = SCIStateManager(artifacts_dir=artifacts_dir)
         logger.info("✓ SCI State Manager initialized")
 
+        # Initialize executor
         self.executor = SCIExecutorAgent()
         logger.info("✓ SCI Executor initialized")
 
-        # TODO: Replace with real SCIPlanCreatorAgent when implemented
-        self.plan_creator = None  # Will use simple planning for now
+        # Initialize Planner with LLM support
+        from ..planner import Planner
+        self.planner = Planner(anthropic_client=anthropic_client)
+        logger.info("✓ SCI Planner initialized")
+
+        # Initialize AnalysisAgent with optional LLM verification
+        from ..analysis import AnalysisAgent
+        self.analysis_agent = AnalysisAgent(
+            anthropic_client=anthropic_client,
+            enable_llm_verification=enable_llm_verification
+        )
+        logger.info(f"✓ SCI Analysis Agent initialized (LLM verification: {enable_llm_verification})")
 
         # Tracking
         self.cycle_results = []
@@ -264,16 +278,14 @@ class SCIResearchWorkflow:
         num_experiments: int
     ) -> List[Configuration]:
         """
-        Simple experiment planning (placeholder for real planner).
+        Experiment planning using Planner with LLM support.
 
-        Explores unexplored families and UQ combinations.
+        Explores unexplored families and UQ combinations using the Planner agent.
         """
-        from ..planner import Planner
-
         # Get explored configs
         explored_configs = context.get('explored_configs', [])
 
-        # Create summary
+        # Create summary for planner
         summary = {
             'total_experiments': len(explored_configs),
             'recon_families': {},
@@ -286,9 +298,18 @@ class SCIResearchWorkflow:
             summary['recon_families'][family] = summary['recon_families'].get(family, 0) + 1
             summary['uq_schemes'][uq] = summary['uq_schemes'].get(uq, 0) + 1
 
-        # Use original planner
+        # Add optimization-specific info
+        summary['frontiers'] = []  # Can add Pareto frontier info
+        summary['constraints'] = {
+            'max_latency': 100,
+            'min_coverage': 0.8
+        }
+
+        # Use Planner instance (now with LLM support)
         budget = min(num_experiments, self.budget_max - self.experiments_conducted)
-        configs = Planner.planner_step(summary, self.design_space, budget)
+        configs = self.planner.planner_step(summary, self.design_space, budget)
+
+        logger.info(f"Planner proposed {len(configs)} configurations")
 
         return configs
 
@@ -296,15 +317,21 @@ class SCIResearchWorkflow:
         self,
         experiments: List[ExperimentRecord]
     ):
-        """Analyze Pareto frontier."""
+        """
+        Analyze Pareto frontier using AnalysisAgent.
+
+        Optionally uses LLM-generated verification if enabled.
+        """
         from ..data_structures import WorldModel
 
         # Build world model
         world_model = WorldModel()
         world_model.experiments = experiments
 
-        # Run analysis
-        pareto_ids, trends = AnalysisAgent.analysis_step(world_model)
+        # Run analysis using AnalysisAgent instance
+        pareto_ids, trends = self.analysis_agent.analysis_step(world_model)
+
+        logger.info(f"Analysis found {len(pareto_ids)} Pareto-optimal configurations")
 
         return pareto_ids, trends
 
@@ -382,3 +409,132 @@ class SCIResearchWorkflow:
         )
 
         return results
+
+    # ============================================================================
+    # Kosmos Integration Interface (for future integration)
+    # ============================================================================
+
+    def get_cycle_context(self, cycle: int, lookback: int = 3) -> Dict[str, Any]:
+        """
+        Get context for a cycle (Kosmos-compatible interface).
+
+        This method provides a unified interface compatible with Kosmos'
+        ResearchWorkflow.get_cycle_context() format.
+
+        Args:
+            cycle: Current cycle number
+            lookback: Number of past cycles to include
+
+        Returns:
+            Context dictionary with explored configs and findings
+        """
+        return self.state_manager.get_sci_context(cycle, lookback)
+
+    def to_research_finding(self, experiment: ExperimentRecord) -> Dict[str, Any]:
+        """
+        Convert SCI experiment to Kosmos Finding format.
+
+        Args:
+            experiment: SCI experiment record
+
+        Returns:
+            Dictionary in Kosmos Finding format
+        """
+        return {
+            'finding_id': experiment.id,
+            'summary': (
+                f"SCI Config: {experiment.config.recon_family} + "
+                f"{experiment.config.uq_scheme} - "
+                f"PSNR: {experiment.metrics.psnr:.2f}dB, "
+                f"Coverage: {experiment.metrics.coverage:.2%}"
+            ),
+            'statistics': {
+                'psnr': experiment.metrics.psnr,
+                'coverage': experiment.metrics.coverage,
+                'latency': experiment.metrics.latency,
+                'calibration_error': experiment.metrics.calibration_error
+            },
+            'evidence_type': 'sci_optimization_result',
+            'metadata': {
+                'config': experiment.config.to_dict(),
+                'artifacts': experiment.artifacts.to_dict()
+            }
+        }
+
+    def get_all_findings_as_research_format(self) -> List[Dict[str, Any]]:
+        """
+        Get all SCI experiments in Kosmos Finding format.
+
+        Returns:
+            List of findings compatible with Kosmos ResearchWorkflow
+        """
+        all_findings = self.state_manager.get_all_findings()
+        return [
+            self.to_research_finding(exp)
+            for exp in all_findings
+            if hasattr(exp, 'config') and hasattr(exp, 'metrics')
+        ]
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive statistics (Kosmos-compatible interface).
+
+        Returns:
+            Dictionary with workflow statistics
+        """
+        return {
+            'workflow': {
+                'type': 'sci_optimization',
+                'research_objective': self.research_objective,
+                'optimization_objectives': self.optimization_objectives,
+                'budget_max': self.budget_max,
+                'experiments_conducted': self.experiments_conducted,
+                'cycles_completed': len(self.cycle_results)
+            },
+            'state_manager': {
+                'total_experiments': len(self.state_manager.get_all_findings()),
+                'pareto_frontier_size': len(self.state_manager.get_pareto_frontier())
+            },
+            'planner': {
+                'type': 'sci_planner',
+                'llm_enabled': self.planner.client is not None
+            },
+            'analysis': {
+                'type': 'sci_analysis',
+                'llm_verification_enabled': self.analysis_agent.enable_llm_verification
+            }
+        }
+
+    async def generate_report(self) -> str:
+        """
+        Generate research report (Kosmos-compatible interface).
+
+        Returns:
+            Markdown-formatted report
+        """
+        results = await self._finalize_results() if not self.cycle_results else self.cycle_results[-1]
+
+        report = f"# SCI Optimization Report\n\n"
+        report += f"**Objective**: {self.research_objective}\n"
+        report += f"**Date**: {datetime.now().strftime('%Y-%m-%d')}\n"
+        report += f"**Experiments Conducted**: {self.experiments_conducted}\n\n"
+
+        report += f"## Summary\n\n"
+        report += f"This SCI optimization workflow completed {len(self.cycle_results)} cycles, "
+        report += f"conducting {self.experiments_conducted} experiments.\n\n"
+
+        # Pareto frontier
+        pareto_ids = self.state_manager.get_pareto_frontier()
+        report += f"## Pareto Frontier ({len(pareto_ids)} configurations)\n\n"
+
+        all_findings = self.state_manager.get_all_findings()
+        pareto_findings = [f for f in all_findings if f.finding_id in pareto_ids]
+
+        for i, finding in enumerate(pareto_findings[:10], 1):
+            report += f"### Configuration {i}\n\n"
+            stats = finding.statistics
+            report += f"- **PSNR**: {stats.get('psnr', 0):.2f} dB\n"
+            report += f"- **Coverage**: {stats.get('coverage', 0):.2%}\n"
+            report += f"- **Latency**: {stats.get('latency', 0):.1f} ms\n\n"
+
+        return report

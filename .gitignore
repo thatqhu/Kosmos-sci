@@ -104,7 +104,7 @@ venv
 venv/
 env/
 ENV/
-artifacts/sci_optimization
+artifacts/
 
 # Coverage reports
 .coverage
