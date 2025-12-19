@@ -3,6 +3,20 @@ SCI Research Workflow for Kosmos AI Scientist.
 
 Implements a specialized research workflow for SCI reconstruction optimization,
 compatible with the main ResearchWorkflow architecture.
+
+Version: 2.1.0
+Last Updated: 2025-12-19
+
+Changelog:
+    v2.1.0 (2025-12-19):
+        - 支持通过 api_token 和 openapi_url 直接初始化 LLM client
+        - 添加 _initialize_llm_client 内部方法
+        - 支持自动从环境变量读取 API key
+        - 支持多个 LLM provider (Gemini, Anthropic, OpenAI, Ollama)
+        - 移除 anthropic_client 参数，统一使用内部初始化
+
+    v2.0.0:
+        - 初始版本
 """
 
 from typing import Dict, List, Any, Optional
@@ -37,10 +51,15 @@ class SCIResearchWorkflow:
         design_space: Dict[str, List[Any]],
         initial_configs: Optional[List[Configuration]] = None,
         optimization_objectives: List[str] = ['psnr', 'coverage'],
-        anthropic_client=None,
+        openapi_url: Optional[str] = None,
+        api_token: Optional[str] = None,
+        llm_model: str = "gemini-2.5-pro",
+        llm_provider: str = "auto",
         artifacts_dir: str = "artifacts/sci",
         budget_max: int = 50,
-        enable_llm_verification: bool = False
+        enable_llm_verification: bool = False,
+        reference_docs: Optional[List[str]] = None,
+        reference_doc_paths: Optional[List[str]] = None
     ):
         """
         Initialize SCI Research Workflow.
@@ -50,10 +69,15 @@ class SCIResearchWorkflow:
             design_space: Dict defining valid configuration space
             initial_configs: Seed configurations (optional)
             optimization_objectives: Metrics to optimize
-            anthropic_client: Anthropic client for LLM-based planning
+            openapi_url: OpenAPI-compatible endpoint URL (e.g., Gemini API)
+            api_token: API token/key for LLM service
+            llm_model: LLM model name (e.g., "gemini-2.0-flash-exp")
+            llm_provider: LLM provider ("auto", "openai", "anthropic")
             artifacts_dir: Directory for artifacts
             budget_max: Maximum number of experiments
             enable_llm_verification: Enable LLM-generated verification algorithms
+            reference_docs: List of reference document texts for planning
+            reference_doc_paths: List of file paths to reference documents (txt, md, pdf)
         """
         self.research_objective = research_objective
         self.design_space = design_space
@@ -61,9 +85,21 @@ class SCIResearchWorkflow:
         self.optimization_objectives = optimization_objectives
         self.budget_max = budget_max
         self.experiments_conducted = 0
-        self.anthropic_client = anthropic_client
 
         logger.info("Initializing SCI Research Workflow...")
+
+        # Initialize LLM client internally
+        self.llm_client = None
+        if api_token or openapi_url:
+            self.llm_client = self._initialize_llm_client(
+                api_token=api_token,
+                base_url=openapi_url,
+                model=llm_model,
+                provider=llm_provider
+            )
+            logger.info(f"✓ LLM Client initialized (provider: {llm_provider}, model: {llm_model})")
+        else:
+            logger.warning("No API token provided, LLM features will be disabled")
 
         # Initialize state management
         self.state_manager = SCIStateManager(artifacts_dir=artifacts_dir)
@@ -73,15 +109,23 @@ class SCIResearchWorkflow:
         self.executor = SCIExecutorAgent()
         logger.info("✓ SCI Executor initialized")
 
-        # Initialize Planner with LLM support
+        # Initialize Planner for experiment configuration generation
         from ..planner import Planner
-        self.planner = Planner(anthropic_client=anthropic_client)
-        logger.info("✓ SCI Planner initialized")
+        self.planner = Planner(
+            openai_client=self.llm_client if llm_provider in ["auto", "openai"] else None,
+            anthropic_client=self.llm_client if llm_provider == "anthropic" else None,
+            model=llm_model,
+            provider=llm_provider,
+            reference_docs=reference_docs,
+            reference_doc_paths=reference_doc_paths
+        )
+        logger.info("✓ Planner initialized")
 
         # Initialize AnalysisAgent with optional LLM verification
         from ..analysis import AnalysisAgent
         self.analysis_agent = AnalysisAgent(
-            anthropic_client=anthropic_client,
+            openai_client=self.llm_client if llm_provider in ["auto", "openai"] else None,
+            anthropic_client=self.llm_client if llm_provider == "anthropic" else None,
             enable_llm_verification=enable_llm_verification
         )
         logger.info(f"✓ SCI Analysis Agent initialized (LLM verification: {enable_llm_verification})")
@@ -90,6 +134,84 @@ class SCIResearchWorkflow:
         self.cycle_results = []
         self.pareto_history = []
         self.start_time = None
+
+    def _initialize_llm_client(
+        self,
+        api_token: Optional[str],
+        base_url: Optional[str],
+        model: str,
+        provider: str
+    ):
+        """
+        Initialize LLM client based on provider.
+
+        Args:
+            api_token: API token/key
+            base_url: Base URL for API (optional)
+            model: Model name
+            provider: Provider type ("auto", "openai", "anthropic")
+
+        Returns:
+            Initialized client (OpenAI or Anthropic)
+        """
+        import os
+
+        # Get API token from environment if not provided
+        api_token = api_token or os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+
+        if not api_token:
+            logger.warning("No API token provided and none found in environment")
+            return None
+
+        # Auto-detect provider if needed
+        if provider == "auto":
+            if os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY"):
+                provider = "openai"
+            elif os.getenv("ANTHROPIC_API_KEY"):
+                provider = "anthropic"
+            else:
+                # Default to openai for Gemini
+                provider = "openai"
+
+        # Initialize based on provider
+        if provider == "openai":
+            try:
+                from openai import OpenAI
+
+                # Default to Gemini endpoint if no base_url provided
+                if base_url is None:
+                    base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+                client = OpenAI(
+                    api_key=api_token,
+                    base_url=base_url
+                )
+                logger.info(f"Initialized OpenAI-compatible client (base_url: {base_url})")
+                return client
+            except ImportError:
+                logger.error("openai package not installed. Install with: pip install openai")
+                return None
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI client: {e}")
+                return None
+
+        elif provider == "anthropic":
+            try:
+                import anthropic
+
+                client = anthropic.Anthropic(api_key=api_token)
+                logger.info("Initialized Anthropic client")
+                return client
+            except ImportError:
+                logger.error("anthropic package not installed. Install with: pip install anthropic")
+                return None
+            except Exception as e:
+                logger.error(f"Failed to initialize Anthropic client: {e}")
+                return None
+
+        else:
+            logger.error(f"Unknown provider: {provider}")
+            return None
 
     async def run(
         self,
@@ -124,11 +246,15 @@ class SCIResearchWorkflow:
             f"{'='*70}\n"
         )
 
-        # Phase 1: Seed experiments if provided
+        # Phase 1: Skip seed experiments - start directly with LLM planning
+        # Note: initial_configs are now only used as reference, not executed
         if self.initial_configs:
-            await self._run_seed_experiments()
+            logger.info(
+                f"\nSkipping {len(self.initial_configs)} seed experiments. "
+                f"Starting directly with LLM-generated configurations.\n"
+            )
 
-        # Phase 2: Optimization cycles
+        # Phase 2: Optimization cycles (starting from cycle 1 with LLM planning)
         for cycle in range(1, num_cycles + 1):
             logger.info(f"\n--- Cycle {cycle}/{num_cycles} ---")
 
@@ -155,6 +281,12 @@ class SCIResearchWorkflow:
         return await self._finalize_results()
 
     async def _run_seed_experiments(self):
+        """
+        DEPRECATED: Seed experiments are now skipped.
+
+        The workflow starts directly with LLM-generated configurations.
+        This method is kept for backward compatibility but is no longer called.
+        """
         """Run initial seed experiments."""
         logger.info(f"\nRunning {len(self.initial_configs)} seed experiments...")
 
@@ -278,18 +410,22 @@ class SCIResearchWorkflow:
         num_experiments: int
     ) -> List[Configuration]:
         """
-        Experiment planning using Planner with LLM support.
+        Simple experiment planning (placeholder for real planner).
 
-        Explores unexplored families and UQ combinations using the Planner agent.
+        Explores unexplored families and UQ combinations.
         """
+        from ..planner import Planner
+
         # Get explored configs
         explored_configs = context.get('explored_configs', [])
 
-        # Create summary for planner
+        # Create summary with required fields for Planner
         summary = {
             'total_experiments': len(explored_configs),
             'recon_families': {},
-            'uq_schemes': {}
+            'uq_schemes': {},
+            'best_psnr': 0.0,
+            'avg_psnr': 0.0
         }
 
         for config in explored_configs:
@@ -298,20 +434,26 @@ class SCIResearchWorkflow:
             summary['recon_families'][family] = summary['recon_families'].get(family, 0) + 1
             summary['uq_schemes'][uq] = summary['uq_schemes'].get(uq, 0) + 1
 
-        # Add optimization-specific info
-        summary['frontiers'] = []  # Can add Pareto frontier info
-        summary['constraints'] = {
-            'max_latency': 100,
-            'min_coverage': 0.8
-        }
-
-        # Use Planner instance (now with LLM support)
+        # Use original planner
         budget = min(num_experiments, self.budget_max - self.experiments_conducted)
-        configs = self.planner.planner_step(summary, self.design_space, budget)
 
-        logger.info(f"Planner proposed {len(configs)} configurations")
+        if budget <= 0:
+            logger.warning("No budget remaining for planning")
+            return []
 
-        return configs
+        try:
+            # Use instance planner method
+            configs = self.planner.planner_step(
+                summary=summary,
+                design_space=self.design_space,
+                budget_remaining=budget,
+                explored_configs=None  # Could pass explored configs for deduplication
+            )
+            logger.debug(f"Planner generated {len(configs)} configurations")
+            return configs
+        except Exception as e:
+            logger.error(f"Planning failed: {e}", exc_info=True)
+            return []
 
     def _analyze_pareto(
         self,
@@ -397,13 +539,15 @@ class SCIResearchWorkflow:
             'total_time': total_time
         }
 
+        best_psnr_str = f"{best_metrics['psnr']:.2f}" if best_metrics else "N/A"
+
         logger.info(
             f"\n{'='*70}\n"
             f"SCI Research Workflow Complete!\n"
             f"Experiments: {results['total_experiments']}\n"
             f"Cycles: {results['cycles_completed']}\n"
             f"Pareto Frontier: {results['final_pareto_size']} configurations\n"
-            f"Best PSNR: {best_metrics['psnr'] if best_metrics else 'N/A':.2f}dB\n"
+            f"Best PSNR: {best_psnr_str}dB\n"
             f"Time: {total_time:.1f}s\n"
             f"{'='*70}\n"
         )

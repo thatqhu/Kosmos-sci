@@ -49,7 +49,9 @@ class Planner:
         api_key: Optional[str] = None,
         model: str = "gemini-2.0-flash-exp",
         provider: str = "auto",  # "anthropic", "openai", "auto"
-        base_url: Optional[str] = None
+        base_url: Optional[str] = None,
+        reference_docs: Optional[List[str]] = None,  # ← 新增：参考文档
+        reference_doc_paths: Optional[List[str]] = None  # ← 新增：文档路径
     ):
         """
         Initialize Planner with LLM support (Anthropic or OpenAI-compatible).
@@ -61,10 +63,17 @@ class Planner:
             model: Model name (e.g., "gemini-2.0-flash-exp", "claude-sonnet-4-5")
             provider: "anthropic", "openai", or "auto" (auto-detect)
             base_url: Custom base URL for OpenAI-compatible APIs
+            reference_docs: List of reference document texts (e.g., papers, guidelines)
+            reference_doc_paths: List of file paths to reference documents
         """
         self.model = model
         self.client = None
         self.provider = None
+
+        # Load reference documents
+        self.reference_docs = self._load_reference_docs(reference_docs, reference_doc_paths)
+        if self.reference_docs:
+            logger.info(f"Loaded {len(self.reference_docs)} reference documents for planning")
 
         # Priority 1: Use provided client
         if anthropic_client is not None:
@@ -122,6 +131,85 @@ class Planner:
 
             else:
                 logger.warning(f"Provider '{provider}' not available or package not installed")
+
+    def _load_reference_docs(
+        self,
+        docs: Optional[List[str]],
+        doc_paths: Optional[List[str]]
+    ) -> List[Dict[str, str]]:
+        """
+        Load reference documents from text or file paths.
+
+        Args:
+            docs: List of document texts
+            doc_paths: List of file paths to documents
+
+        Returns:
+            List of document dictionaries with 'content' and 'source'
+        """
+        loaded_docs = []
+
+        # Add directly provided documents
+        if docs:
+            for i, doc_text in enumerate(docs):
+                loaded_docs.append({
+                    'source': f'direct_input_{i+1}',
+                    'content': doc_text
+                })
+
+        # Load documents from file paths
+        if doc_paths:
+            for path in doc_paths:
+                try:
+                    content = self._read_document_file(path)
+                    loaded_docs.append({
+                        'source': path,
+                        'content': content
+                    })
+                    logger.info(f"Loaded reference document: {path}")
+                except Exception as e:
+                    logger.warning(f"Failed to load document {path}: {e}")
+
+        return loaded_docs
+
+    def _read_document_file(self, filepath: str) -> str:
+        """
+        Read document from file (supports txt, md, pdf).
+
+        Args:
+            filepath: Path to document file
+
+        Returns:
+            Document text content
+        """
+        filepath_lower = filepath.lower()
+
+        # Plain text files
+        if filepath_lower.endswith(('.txt', '.md', '.markdown')):
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return f.read()
+
+        # PDF files
+        elif filepath_lower.endswith('.pdf'):
+            try:
+                import PyPDF2
+                with open(filepath, 'rb') as f:
+                    pdf_reader = PyPDF2.PdfReader(f)
+                    text = []
+                    for page in pdf_reader.pages:
+                        text.append(page.extract_text())
+                    return '\n\n'.join(text)
+            except ImportError:
+                logger.warning("PyPDF2 not installed, cannot read PDF. Install: pip install PyPDF2")
+                return f"[PDF file: {filepath} - PyPDF2 library required to read]"
+            except Exception as e:
+                logger.warning(f"Failed to read PDF {filepath}: {e}")
+                return f"[Failed to read PDF: {filepath}]"
+
+        # Unsupported format
+        else:
+            logger.warning(f"Unsupported document format: {filepath}")
+            return f"[Unsupported format: {filepath}]"
 
     @staticmethod
     def summarize_world_model(world_model: WorldModel) -> Dict[str, Any]:
@@ -208,13 +296,15 @@ class Planner:
 
         return gaps if gaps else ["explore_variations"]
 
-    @staticmethod
-    def build_planner_prompt(gaps: List[str],
+    def build_planner_prompt(self,
+                            gaps: List[str],
                             frontiers: List[str],
                             constraints: Dict[str, Any],
                             budget: int) -> str:
         """
         Build prompt for LLM-based configuration proposal.
+
+        **Now includes reference documents for domain-informed planning.**
 
         Args:
             gaps: Under-explored regions
@@ -223,18 +313,56 @@ class Planner:
             budget: Remaining experiment budget
 
         Returns:
-            Formatted prompt string
+            Formatted prompt string with optional reference documents
         """
+        # Base prompt
         prompt = f"""You are an AI experiment designer for snapshot compressive imaging (SCI).
+
+Your task is to propose new experiment configurations based on the current exploration state.
 
 Current state:
 - Under-explored regions: {', '.join(gaps)}
 - Pareto frontier: {len(frontiers)} configurations
 - Constraints: {constraints}
 - Remaining budget: {budget} experiments
+"""
 
-Propose {min(3, budget)} new experiment configurations, prioritizing under-explored regions.
-Each configuration should include: recon_family, uq_scheme, and relevant parameters.
+        # Add reference documents if available
+        if self.reference_docs:
+            prompt += "\n## Reference Materials\n\n"
+            prompt += "The following reference documents provide domain knowledge to inform your planning:\n\n"
+
+            for i, doc in enumerate(self.reference_docs, 1):
+                source = doc['source']
+                content = doc['content']
+
+                # Truncate very long documents (keep first 2000 chars)
+                if len(content) > 2000:
+                    content_preview = content[:2000] + f"\n...[truncated, total {len(content)} chars]"
+                else:
+                    content_preview = content
+
+                prompt += f"### Reference Document {i}: {source}\n"
+                prompt += f"```\n{content_preview}\n```\n\n"
+
+        # Task instruction
+        prompt += f"""
+## Task
+
+Based on the above information and reference materials, propose {min(3, budget)} new experiment configurations.
+
+Priority: Focus on under-explored regions while leveraging insights from the reference documents.
+
+Each configuration should include:
+- recon_family: Reconstruction architecture (e.g., "CIAS-Core", "CIAS-Core-ELP", "Baseline-CNN")
+- uq_scheme: Uncertainty quantification scheme (e.g., "Conformal", "Ensemble", "None")
+- recon_params: Architecture parameters (e.g., {{"num_layers": 10, "hidden_dim": 128}})
+- uq_params: UQ-specific parameters
+- forward_config: Forward model config
+- train_config: Training hyperparameters
+
+**Output Format**: Return a JSON array of configuration objects.
+**Avoid**: Do not propose configurations already tried (consider the under-explored regions list).
 """
         return prompt
 
@@ -424,42 +552,82 @@ Each configuration should include: recon_family, uq_scheme, and relevant paramet
 
     def planner_step(self, summary: Dict[str, Any],
                     design_space: Dict[str, List[Any]],
-                    budget_remaining: int) -> List[Configuration]:
+                    budget_remaining: int,
+                    explored_configs: Optional[List[Configuration]] = None) -> List[Configuration]:
         """
         Algorithm 3: PLANNER_STEP
 
         Main planner logic that:
         1. Identifies under-explored regions
-        2. Builds LLM prompt
+        2. Builds LLM prompt (with explored configs info)
         3. Generates configuration proposals
-        4. Validates and projects to design space
-        5. Returns approved configurations
+        4. **Filters duplicate configurations using hash**
+        5. Validates and projects to design space
+        6. Returns approved configurations
 
         Args:
             summary: World model summary
             design_space: Valid design space
             budget_remaining: Remaining experiment budget
+            explored_configs: Previously explored configurations (for deduplication)
 
         Returns:
-            List of proposed configurations
+            List of NEW proposed configurations (no duplicates)
         """
+        # Build set of explored configuration hashes for O(1) lookup
+        explored_hashes = set()
+        if explored_configs:
+            for config in explored_configs:
+                try:
+                    explored_hashes.add(config.get_hash_key())
+                except Exception as e:
+                    logger.warning(f"Failed to hash config: {e}")
+
+        logger.info(f"[Planner] {len(explored_hashes)} configurations already explored")
+
         # Identify gaps in exploration
         gaps = Planner.identify_underexplored_regions(summary)
         frontiers = summary.get("frontiers", [])
         constraints = summary.get("constraints", {})
 
-        # Build LLM prompt
-        prompt = Planner.build_planner_prompt(gaps, frontiers, constraints, budget_remaining)
+        # Build LLM prompt (with optional reference documents)
+        prompt = self.build_planner_prompt(gaps, frontiers, constraints, budget_remaining)
 
         # Generate proposals via LLM (now uses instance method)
         proposals_raw = self.llm_generate_configs(prompt)
 
-        # Validate and project to design space
+        # Validate, project to design space, and filter duplicates
         new_configs = []
+        duplicate_count = 0
+
         for proposal in proposals_raw:
+            # Project to valid configuration
             config = Planner.project_to_design_space(proposal, design_space)
+
+            # Check if configuration is new (not explored)
+            config_hash = config.get_hash_key()
+
+            if config_hash in explored_hashes:
+                duplicate_count += 1
+                logger.debug(
+                    f"[Planner] Skipping duplicate: "
+                    f"{config.recon_family} + {config.uq_scheme}"
+                )
+                continue
+
+            # Validate config
             if Planner.is_valid_config(config, constraints):
                 new_configs.append(config)
+                explored_hashes.add(config_hash)  # Mark as explored for this batch
+            else:
+                logger.warning(
+                    f"[Planner] Invalid config: {config.recon_family}"
+                )
+
+        logger.info(
+            f"[Planner] Generated {len(new_configs)} new configs "
+            f"({duplicate_count} duplicates filtered)"
+        )
 
         # Truncate to budget
         if len(new_configs) > budget_remaining:

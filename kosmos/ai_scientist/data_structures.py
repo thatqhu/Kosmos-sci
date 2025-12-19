@@ -39,6 +39,51 @@ class Configuration:
         """Convert configuration to dictionary."""
         return asdict(self)
 
+    def get_hash_key(self) -> str:
+        """
+        Generate a unique hash key for this configuration.
+
+        Used to identify duplicate configurations. Two configurations with
+        the same hash are considered identical.
+
+        Returns:
+            String hash key
+        """
+        import json
+        import hashlib
+
+        # Create a canonical representation
+        # Sort dict keys to ensure consistent ordering
+        config_dict = {
+            'recon_family': self.recon_family,
+            'recon_params': self._dict_to_sorted_str(self.recon_params),
+            'uq_scheme': self.uq_scheme,
+            'uq_params': self._dict_to_sorted_str(self.uq_params),
+            'forward_config': self._dict_to_sorted_str(self.forward_config),
+            'train_config': self._dict_to_sorted_str(self.train_config)
+        }
+
+        # Create JSON string with sorted keys
+        canonical_str = json.dumps(config_dict, sort_keys=True)
+
+        # Generate hash
+        return hashlib.sha256(canonical_str.encode()).hexdigest()[:16]
+
+    def _dict_to_sorted_str(self, d: Dict) -> str:
+        """Convert dict to sorted string representation."""
+        import json
+        return json.dumps(d, sort_keys=True)
+
+    def __hash__(self) -> int:
+        """Make Configuration hashable for use in sets/dicts."""
+        return int(self.get_hash_key(), 16)
+
+    def __eq__(self, other) -> bool:
+        """Check equality based on hash key."""
+        if not isinstance(other, Configuration):
+            return False
+        return self.get_hash_key() == other.get_hash_key()
+
 
 @dataclass
 class Metrics:
