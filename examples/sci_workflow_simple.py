@@ -40,8 +40,8 @@ async def main():
     workflow = SCIResearchWorkflow(
         research_objective="优化Snapshot Compressive Imaging重建算法的PSNR和覆盖率",
         design_space=design_space,
-        api_token="cgpt_hpveLoO3yy5vghoJsdLshT1J542FSn14",  # 从环境变量获取
-        openapi_url="https://comparegpt.io/api/",
+        api_token=os.getenv("GEMINI_API_KEY"),  # 从环境变量获取
+        openapi_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         initial_configs=None,  # None表示直接从LLM规划开始，不运行种子实验
         optimization_objectives=['psnr', 'coverage', 'latency'],
         artifacts_dir="./artifacts/sci_optimization",

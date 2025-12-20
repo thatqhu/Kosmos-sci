@@ -53,7 +53,7 @@ class SCIResearchWorkflow:
         optimization_objectives: List[str] = ['psnr', 'coverage'],
         openapi_url: Optional[str] = None,
         api_token: Optional[str] = None,
-        llm_model: str = "gemini-2.5-pro",
+        llm_model: str = "gemini-2.5-flash",
         llm_provider: str = "auto",
         artifacts_dir: str = "artifacts/sci",
         budget_max: int = 50,
@@ -449,7 +449,7 @@ class SCIResearchWorkflow:
                 budget_remaining=budget,
                 explored_configs=None  # Could pass explored configs for deduplication
             )
-            logger.debug(f"Planner generated {len(configs)} configurations")
+            logger.info(f"Planner generated {len(configs)} configurations")
             return configs
         except Exception as e:
             logger.error(f"Planning failed: {e}", exc_info=True)

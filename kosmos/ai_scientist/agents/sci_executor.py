@@ -24,6 +24,7 @@ class SCIExecutorAgent(BaseAgent):
 
     def __init__(self):
         """Initialize SCI Executor Agent."""
+        self.executor = Executor()
         self.name = "SCIExecutorAgent"
 
     async def execute(
@@ -65,7 +66,7 @@ class SCIExecutorAgent(BaseAgent):
 
         # Execute experiment using original Executor
         try:
-            metrics, artifacts = Executor.run_campaign(config)
+            metrics, artifacts = self.executor.run_campaign(config)
         except Exception as e:
             logger.error(f"Experiment execution failed: {e}")
             raise
